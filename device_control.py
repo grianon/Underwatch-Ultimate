@@ -1,9 +1,10 @@
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import * 
+from PyQt5.QtCore import *
 from PyQt5.QtGui import QPalette
 import time
 
-import buttplug 
+import buttplug
+
 
 class DeviceControlWidget(QWidget):
     # custom signals have to be defined outside __init__ for some reason
@@ -14,7 +15,7 @@ class DeviceControlWidget(QWidget):
         self.client_name = client_name
         self.devices = {}
         self.setup_new_intiface_client()
-        self.connect_requested = False
+        self.connect_requested = True  # auto connect on start
         self.last_send = 0
 
         layout = QGridLayout(self)
@@ -41,7 +42,7 @@ class DeviceControlWidget(QWidget):
         self.devices_layout.setAlignment(Qt.AlignTop)
         self.update_devices_signal.connect(self.update_device_list)
 
-        scroll_layout.setContentsMargins(0,0,0,0)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
         scroll_area.setBackgroundRole(QPalette.Base)
         scroll_area.setFrameShape(QFrame.NoFrame)
 
@@ -60,7 +61,7 @@ class DeviceControlWidget(QWidget):
 
     def set_connect_request(self):
         self.connect_requested = True
-    
+
     async def update(self, send_value):
         if self.connect_requested:
             self.connect_requested = False
@@ -71,27 +72,29 @@ class DeviceControlWidget(QWidget):
                     self.setup_new_intiface_client()
 
                 self.connect_btn.setText("Connecting...")
-                connector = buttplug.WebsocketConnector(self.intiface_address.text(), logger=self.client.logger)
+                connector = buttplug.WebsocketConnector(
+                    self.intiface_address.text(), logger=self.client.logger
+                )
                 await self.client.connect(connector)
                 self.connect_btn.setText("Connected")
                 await self.client.start_scanning()
             except Exception as e:
                 self.connect_btn.setText("Connection Failed")
                 print(e)
-        
+
         if self.is_connected() == False:
             return
 
         self.update_devices_signal.emit()
 
         t = time.time()
-        if (t - self.last_send < 0.1):
+        if t - self.last_send < 0.1:
             return
         self.last_send = t
-        
+
         for device in self.devices:
             await self.devices[device].send(send_value)
-    
+
     def is_connected(self):
         return self.client._connector != None and self.client._connector.connected
 
@@ -100,12 +103,16 @@ class DeviceControlWidget(QWidget):
             for device in self.client.devices:
                 if device not in self.devices:
                     print("new device found")
-                    self.devices[device] = self.DeviceWidget(self, self.client.devices[device])
+                    self.devices[device] = self.DeviceWidget(
+                        self, self.client.devices[device]
+                    )
                     self.devices_layout.addWidget(self.devices[device])
 
     class DeviceWidget(QGroupBox):
         def __init__(self, parent, device):
-            super(DeviceControlWidget.DeviceWidget, self).__init__(device.name, parent = None)
+            super(DeviceControlWidget.DeviceWidget, self).__init__(
+                device.name, parent=None
+            )
             self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
             self.device = device
             layout = QGridLayout()
@@ -121,7 +128,7 @@ class DeviceControlWidget(QWidget):
                 self.actuators_layout.addWidget(widget)
 
         async def send(self, value):
-            if (self.device.removed):
+            if self.device.removed:
                 return
             for actuator in self.actuators:
                 await actuator.send(value)
@@ -129,7 +136,9 @@ class DeviceControlWidget(QWidget):
         class ActuatorWidget(QGroupBox):
             def __init__(self, parent, actuator):
                 name = str(actuator.index) + ": " + actuator.type
-                super(DeviceControlWidget.DeviceWidget.ActuatorWidget, self).__init__(name, parent = None)
+                super(DeviceControlWidget.DeviceWidget.ActuatorWidget, self).__init__(
+                    name, parent=None
+                )
                 self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
                 self.actuator = actuator
 
@@ -178,16 +187,18 @@ class DeviceControlWidget(QWidget):
                 try:
                     min_value = self.min_score.value()
                     max_value = self.max_score.value()
-                    min_intensity = self.min_intensity.value()/100
-                    max_intensity = self.max_intensity.value()/100
+                    min_intensity = self.min_intensity.value() / 100
+                    max_intensity = self.max_intensity.value() / 100
 
-                    if (min_value == max_value):
+                    if min_value == max_value:
                         max_value = min_value + 1
 
-                    inverse_lerp = (value - min_value ) / (max_value - min_value)
+                    inverse_lerp = (value - min_value) / (max_value - min_value)
                     inverse_lerp = min(1, max(0, inverse_lerp))
 
-                    send_value = (1-inverse_lerp) * min_intensity + inverse_lerp * max_intensity
+                    send_value = (
+                        1 - inverse_lerp
+                    ) * min_intensity + inverse_lerp * max_intensity
                     send_value = min(1, max(0, send_value))
 
                     await self.actuator.command(send_value)
