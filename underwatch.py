@@ -18,6 +18,16 @@ logging.basicConfig(
 )
 
 
+def handle_exception(exc_type, exc_value, exc_traceback):
+    logging.critical(
+        "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
+    )
+
+
+# Set the global exception hook
+sys.excepthook = handle_exception
+
+
 class GUI(QMainWindow):
     def __init__(self) -> None:
         super(GUI, self).__init__()
